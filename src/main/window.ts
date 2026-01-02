@@ -183,6 +183,9 @@ export function createPanelWindow() {
 
   makePanel(win)
 
+  // Ensure panel stays above all windows on Windows
+  win.setAlwaysOnTop(true, "screen-saver")
+
   return win
 }
 

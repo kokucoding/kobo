@@ -10,7 +10,7 @@ import {
   dialog,
 } from "electron"
 import path from "path"
-import { configStore, recordingsFolder } from "./config"
+import { configStore, recordingsFolder, pendingRecordingsFolder } from "./config"
 import { Config, RecordingHistoryItem } from "../shared/types"
 import { RendererHandlers } from "./renderer-handlers"
 import { postProcessTranscript } from "./llm"
@@ -18,6 +18,13 @@ import { state } from "./state"
 import { updateTrayIcon } from "./tray"
 import { isAccessibilityGranted } from "./utils"
 import { writeText } from "./keyboard"
+import {
+  addReminder,
+  getAllReminders,
+  deleteReminder as deleteReminderFromFile,
+  parseReminderTime,
+  Reminder,
+} from "./reminders"
 
 const t = tipc.create()
 
@@ -39,6 +46,40 @@ const saveRecordingsHitory = (history: RecordingHistoryItem[]) => {
     path.join(recordingsFolder, "history.json"),
     JSON.stringify(history),
   )
+}
+
+// --- Pending Recordings Helpers (for crash recovery) ---
+type PendingRecordingItem = {
+  id: string
+  createdAt: number
+  duration: number
+}
+
+const getPendingRecordings = (): PendingRecordingItem[] => {
+  try {
+    fs.mkdirSync(pendingRecordingsFolder, { recursive: true })
+    const files = fs.readdirSync(pendingRecordingsFolder).filter(f => f.endsWith('.webm'))
+    const items = files.map(f => {
+      const id = path.basename(f, '.webm')
+      const stats = fs.statSync(path.join(pendingRecordingsFolder, f))
+      return { id, createdAt: stats.mtimeMs, duration: 0 }
+    })
+    // Sort by createdAt descending and return last 3
+    return items.sort((a, b) => b.createdAt - a.createdAt).slice(0, 3)
+  } catch {
+    return []
+  }
+}
+
+const savePendingRecording = (id: string, buffer: ArrayBuffer) => {
+  fs.mkdirSync(pendingRecordingsFolder, { recursive: true })
+  fs.writeFileSync(path.join(pendingRecordingsFolder, `${id}.webm`), Buffer.from(buffer))
+}
+
+const deletePendingRecording = (id: string) => {
+  try {
+    fs.unlinkSync(path.join(pendingRecordingsFolder, `${id}.webm`))
+  } catch { /* ignore if not exists */ }
 }
 
 export const router = {
@@ -152,6 +193,20 @@ export const router = {
       duration: number
     }>()
     .action(async ({ input }) => {
+      // Validate audio is not empty
+      if (!input.recording || input.recording.byteLength === 0) {
+        throw new Error("Recording is empty. Please try speaking louder or check your microphone.")
+      }
+
+      // Minimum audio size check (at least 1KB for a valid recording)
+      if (input.recording.byteLength < 1024) {
+        throw new Error("Recording is too short. Please speak for at least 1 second.")
+      }
+
+      // Save recording to pending folder FIRST (for crash recovery)
+      const pendingId = Date.now().toString()
+      savePendingRecording(pendingId, input.recording)
+
       fs.mkdirSync(recordingsFolder, { recursive: true })
 
       const config = configStore.get()
@@ -162,7 +217,7 @@ export const router = {
       )
       form.append(
         "model",
-        config.sttProviderId === "groq" ? "whisper-large-v3" : "whisper-1",
+        config.sttModel || (config.sttProviderId === "groq" ? "whisper-large-v3" : "whisper-1"),
       )
       form.append("response_format", "json")
 
@@ -205,6 +260,9 @@ export const router = {
         path.join(recordingsFolder, `${item.id}.webm`),
         Buffer.from(input.recording),
       )
+
+      // Transcription succeeded, delete pending copy
+      deletePendingRecording(pendingId)
 
       const main = WINDOWS.get("main")
       if (main) {
@@ -260,6 +318,58 @@ export const router = {
         state.isRecording = false
       }
       updateTrayIcon()
+    }),
+
+  // --- Pending Recordings IPC (Crash Recovery) ---
+  getPendingRecordings: t.procedure.action(async () => getPendingRecordings()),
+
+  recoverPendingRecording: t.procedure
+    .input<{ id: string }>()
+    .action(async ({ input }) => {
+      const pendingPath = path.join(pendingRecordingsFolder, `${input.id}.webm`)
+      if (!fs.existsSync(pendingPath)) {
+        throw new Error("Pending recording not found")
+      }
+      const buffer = fs.readFileSync(pendingPath)
+      // Create a new recording entry without transcription
+      fs.mkdirSync(recordingsFolder, { recursive: true })
+      const history = getRecordingHistory()
+      const item: RecordingHistoryItem = {
+        id: input.id,
+        createdAt: Date.now(),
+        duration: 0,
+        transcript: "[Recovered - Transcription pending]",
+      }
+      history.push(item)
+      saveRecordingsHitory(history)
+      fs.writeFileSync(path.join(recordingsFolder, `${item.id}.webm`), buffer)
+      deletePendingRecording(input.id)
+      return item
+    }),
+
+  deletePendingRecording: t.procedure
+    .input<{ id: string }>()
+    .action(async ({ input }) => {
+      deletePendingRecording(input.id)
+    }),
+
+  // --- Reminders IPC ---
+  setReminder: t.procedure
+    .input<{ message: string; timeInput: string }>()
+    .action(async ({ input }) => {
+      const triggerTime = parseReminderTime(input.timeInput)
+      if (!triggerTime) {
+        throw new Error(`Could not parse time: "${input.timeInput}". Try "in 5 minutes" or "at 10am".`)
+      }
+      return addReminder(input.message, triggerTime)
+    }),
+
+  getReminders: t.procedure.action(async () => getAllReminders()),
+
+  dismissReminder: t.procedure
+    .input<{ id: string }>()
+    .action(async ({ input }) => {
+      deleteReminderFromFile(input.id)
     }),
 }
 

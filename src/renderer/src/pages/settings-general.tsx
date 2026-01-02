@@ -20,6 +20,7 @@ import {
   STT_PROVIDERS,
 } from "@shared/index"
 import { Textarea } from "@renderer/components/ui/textarea"
+import { Input } from "@renderer/components/ui/input"
 import {
   Dialog,
   DialogContent,
@@ -112,6 +113,7 @@ export function Component() {
             <SelectContent>
               <SelectItem value="hold-ctrl">Hold Ctrl</SelectItem>
               <SelectItem value="ctrl-slash">Ctrl+{"/"}</SelectItem>
+              <SelectItem value="ctrl-alt-shift-comma">Ctrl+Alt+Shift+,</SelectItem>
             </SelectContent>
           </Select>
         </Control>
@@ -138,6 +140,17 @@ export function Component() {
               ))}
             </SelectContent>
           </Select>
+        </Control>
+        <Control label="Model (optional)" className="px-3">
+          <Input
+            placeholder={sttProviderId === "groq" ? "whisper-large-v3" : "whisper-1"}
+            defaultValue={configQuery.data.sttModel || ""}
+            onChange={(e) => {
+              saveConfig({
+                sttModel: e.currentTarget.value || undefined,
+              })
+            }}
+          />
         </Control>
       </ControlGroup>
 
@@ -176,6 +189,18 @@ export function Component() {
                   ))}
                 </SelectContent>
               </Select>
+            </Control>
+
+            <Control label="Model (optional)" className="px-3">
+              <Input
+                placeholder={transcriptPostProcessingProviderId === "groq" ? "llama-3.3-70b-versatile" : "gpt-4o-mini"}
+                defaultValue={configQuery.data.chatModel || ""}
+                onChange={(e) => {
+                  saveConfig({
+                    chatModel: e.currentTarget.value || undefined,
+                  })
+                }}
+              />
             </Control>
 
             <Control label="Prompt" className="px-3">

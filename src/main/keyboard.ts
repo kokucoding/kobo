@@ -85,6 +85,8 @@ export function listenToKeyboardEvents() {
   let isHoldingCtrlKey = false
   let startRecordingTimer: NodeJS.Timeout | undefined
   let isPressedCtrlKey = false
+  let isPressedAltKey = false
+  let isPressedShiftKey = false
 
   if (process.env.IS_MAC) {
     if (!systemPreferences.isTrustedAccessibilityClient(false)) {
@@ -101,8 +103,14 @@ export function listenToKeyboardEvents() {
 
   const handleEvent = (e: RdevEvent) => {
     if (e.event_type === "KeyPress") {
-      if (e.data.key === "ControlLeft") {
+      if (e.data.key === "ControlLeft" || e.data.key === "ControlRight") {
         isPressedCtrlKey = true
+      }
+      if (e.data.key === "Alt" || e.data.key === "AltLeft" || e.data.key === "AltRight") {
+        isPressedAltKey = true
+      }
+      if (e.data.key === "ShiftLeft" || e.data.key === "ShiftRight") {
+        isPressedShiftKey = true
       }
 
       if (e.data.key === "Escape" && state.isRecording) {
@@ -116,6 +124,11 @@ export function listenToKeyboardEvents() {
 
       if (configStore.get().shortcut === "ctrl-slash") {
         if (e.data.key === "Slash" && isPressedCtrlKey) {
+          getWindowRendererHandlers("panel")?.startOrFinishRecording.send()
+        }
+      } else if (configStore.get().shortcut === "ctrl-alt-shift-comma") {
+        // Ctrl+Alt+Shift+, combo
+        if (e.data.key === "Comma" && isPressedCtrlKey && isPressedAltKey && isPressedShiftKey) {
           getWindowRendererHandlers("panel")?.startOrFinishRecording.send()
         }
       } else {
@@ -154,11 +167,17 @@ export function listenToKeyboardEvents() {
     } else if (e.event_type === "KeyRelease") {
       keysPressed.delete(e.data.key)
 
-      if (e.data.key === "ControlLeft") {
+      if (e.data.key === "ControlLeft" || e.data.key === "ControlRight") {
         isPressedCtrlKey = false
       }
+      if (e.data.key === "Alt" || e.data.key === "AltLeft" || e.data.key === "AltRight") {
+        isPressedAltKey = false
+      }
+      if (e.data.key === "ShiftLeft" || e.data.key === "ShiftRight") {
+        isPressedShiftKey = false
+      }
 
-      if (configStore.get().shortcut === "ctrl-slash") return
+      if (configStore.get().shortcut === "ctrl-slash" || configStore.get().shortcut === "ctrl-alt-shift-comma") return
 
       cancelRecordingTimer()
 
@@ -176,6 +195,12 @@ export function listenToKeyboardEvents() {
   }
 
   const child = spawn(rdevPath, ["listen"], {})
+
+  child.on("error", (err) => {
+    console.error("Failed to start whispo-rs binary:", err.message)
+    // The binary is likely missing or failed to start.
+    // We gracefully degrade - keyboard shortcuts won't work but app won't crash.
+  })
 
   child.stdout.on("data", (data) => {
     if (import.meta.env.DEV) {

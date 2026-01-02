@@ -95,16 +95,47 @@ export class Recorder extends EventEmitter<{
 
     const log = logTime("startRecording")
 
+    // Request audio with noise suppression and echo cancellation
     const stream = (this.stream = await navigator.mediaDevices.getUserMedia({
       audio: {
         deviceId: "default",
+        noiseSuppression: true,
+        echoCancellation: true,
+        autoGainControl: true,
       },
       video: false,
     }))
 
     log("getUserMedia")
 
-    const mediaRecorder = (this.mediaRecorder = new MediaRecorder(stream, {
+    // Create audio processing chain for amplification
+    const audioContext = new AudioContext()
+    const source = audioContext.createMediaStreamSource(stream)
+
+    // Compressor for normalizing volume (softer sounds get louder)
+    const compressor = audioContext.createDynamicsCompressor()
+    compressor.threshold.setValueAtTime(-40, audioContext.currentTime)
+    compressor.knee.setValueAtTime(30, audioContext.currentTime)
+    compressor.ratio.setValueAtTime(8, audioContext.currentTime)
+    compressor.attack.setValueAtTime(0.003, audioContext.currentTime)
+    compressor.release.setValueAtTime(0.25, audioContext.currentTime)
+
+    // Gain node for additional amplification
+    const gainNode = audioContext.createGain()
+    gainNode.gain.setValueAtTime(3.0, audioContext.currentTime) // Boost by 3x for soft speech
+
+    // Connect the audio processing chain
+    source.connect(compressor)
+    compressor.connect(gainNode)
+
+    // Create a destination to capture the processed audio
+    const destination = audioContext.createMediaStreamDestination()
+    gainNode.connect(destination)
+
+    // Use the processed stream for recording
+    const processedStream = destination.stream
+
+    const mediaRecorder = (this.mediaRecorder = new MediaRecorder(processedStream, {
       audioBitsPerSecond: 128e3,
     }))
     log("new MediaRecorder")

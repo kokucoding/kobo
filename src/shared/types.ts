@@ -8,10 +8,11 @@ export type RecordingHistoryItem = {
 }
 
 export type Config = {
-  shortcut?: "hold-ctrl" | "ctrl-slash"
+  shortcut?: "hold-ctrl" | "ctrl-slash" | "ctrl-alt-shift-comma"
   hideDockIcon?: boolean
 
   sttProviderId?: STT_PROVIDER_ID
+  sttModel?: string // Custom STT model name
 
   openaiApiKey?: string
   openaiBaseUrl?: string
@@ -25,4 +26,5 @@ export type Config = {
   transcriptPostProcessingEnabled?: boolean
   transcriptPostProcessingProviderId?: CHAT_PROVIDER_ID
   transcriptPostProcessingPrompt?: string
+  chatModel?: string // Custom chat/LLM model name
 }

@@ -7,6 +7,8 @@ export const dataFolder = path.join(app.getPath("appData"), process.env.APP_ID)
 
 export const recordingsFolder = path.join(dataFolder, "recordings")
 
+export const pendingRecordingsFolder = path.join(dataFolder, "pending_recordings")
+
 export const configPath = path.join(dataFolder, "config.json")
 
 const getConfig = () => {

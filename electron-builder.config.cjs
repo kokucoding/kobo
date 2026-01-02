@@ -2,8 +2,8 @@
 
 /** @type {import('electron-builder').Configuration} */
 module.exports = {
-  appId: "app.whispo",
-  productName: "Whispo",
+  appId: "app.kobo",
+  productName: "Kobo",
   directories: {
     buildResources: "build",
   },
@@ -22,7 +22,7 @@ module.exports = {
   ],
   asarUnpack: ["resources/**", "node_modules/**"],
   win: {
-    executableName: "whispo",
+    executableName: "kobo",
   },
   nsis: {
     artifactName: "${name}-${version}-setup.${ext}",
@@ -54,8 +54,8 @@ module.exports = {
     ],
     notarize: process.env.APPLE_TEAM_ID
       ? {
-          teamId: process.env.APPLE_TEAM_ID,
-        }
+        teamId: process.env.APPLE_TEAM_ID,
+      }
       : undefined,
   },
   dmg: {

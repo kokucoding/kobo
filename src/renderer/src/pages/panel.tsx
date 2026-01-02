@@ -127,27 +127,28 @@ export function Component() {
           <Spinner />
         </div>
       ) : (
-        <div className="flex h-full w-full rounded-xl transition-colors">
-          <div className="flex shrink-0"></div>
+        <div className="flex h-full w-full items-center justify-center">
           <div
-            className="relative flex grow items-center overflow-hidden"
+            className="relative flex items-center overflow-hidden"
             dir="rtl"
           >
-            <div className="absolute right-0 flex h-6 items-center gap-0.5">
+            <div className="flex h-10 items-end gap-0.5">
               {visualizerData
                 .slice()
                 .reverse()
                 .map((rms, index) => {
+                  const isActive = rms !== -1000
+                  const height = Math.min(100, Math.max(10, rms * 100))
                   return (
                     <div
                       key={index}
-                      className={cn(
-                        "h-full w-0.5 shrink-0 rounded-lg",
-                        "bg-red-500 dark:bg-white",
-                        rms === -1000 && "bg-neutral-400 dark:bg-neutral-500",
-                      )}
+                      className="w-1 shrink-0 rounded-full transition-all duration-75"
                       style={{
-                        height: `${Math.min(100, Math.max(16, rms * 100))}%`,
+                        height: `${height}%`,
+                        backgroundColor: isActive ? "#40E0D0" : "#3a3a4a",
+                        boxShadow: isActive
+                          ? "0 0 8px #40E0D0, 0 0 16px #40E0D0, 0 0 24px #20B2AA"
+                          : "none",
                       }}
                     />
                   )

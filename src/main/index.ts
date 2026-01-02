@@ -1,4 +1,4 @@
-import { app, Menu } from "electron"
+import { app, Menu, dialog } from "electron"
 import { electronApp, optimizer } from "@electron-toolkit/utils"
 import {
   createMainWindow,
@@ -14,8 +14,27 @@ import { registerServeProtocol, registerServeSchema } from "./serve"
 import { createAppMenu } from "./menu"
 import { initTray } from "./tray"
 import { isAccessibilityGranted } from "./utils"
+import { startReminderPolling } from "./reminders"
 
 registerServeSchema()
+
+// Single instance lock
+const gotTheLock = app.requestSingleInstanceLock()
+
+if (!gotTheLock) {
+  // Cannot show dialog before app is ready, just quit silently
+  // The existing instance will be focused via second-instance event
+  app.quit()
+} else {
+  app.on("second-instance", () => {
+    // Focus existing window if a second instance tries to start
+    const mainWin = WINDOWS.get("main")
+    if (mainWin) {
+      if (mainWin.isMinimized()) mainWin.restore()
+      mainWin.focus()
+    }
+  })
+}
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
@@ -43,6 +62,8 @@ app.whenReady().then(() => {
   listenToKeyboardEvents()
 
   initTray()
+
+  startReminderPolling()
 
   import("./updater").then((res) => res.init()).catch(console.error)
 

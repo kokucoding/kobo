@@ -1,29 +1,41 @@
-# Whispo
+# Kobo - AI Powered Dictation
 
-AI-powered dictation tool.
+**Kobo** is an AI-powered dictation application forked from [Whispo](https://github.com/egoist/whispo) with significant enhancements.
 
-## Download
+## Modifications from Original Whispo
 
-Currently building for macOS (Apple Silicon) and Windows x64.
+This fork includes the following enhancements:
 
-[Releases](https://github.com/egoist/whispo/releases/latest)
+- **Custom AI Models**: Users can specify their own STT (Speech-to-Text) and LLM (Chat) model names
+- **New Keyboard Shortcut**: Added `Ctrl+Alt+Shift+,` as a recording shortcut option
+- **Enhanced Voice Amplification**: 3x audio gain for better transcription of soft speech
+- **Always-On-Top Panel**: Recording visualizer stays above all windows
+- **Voice-Activated Reminders**: Set reminders using natural language
+- **Crash Recovery**: Last 3 recordings are preserved for recovery
+- **Single Instance Lock**: Prevents multiple app instances
+- **Dark Turquoise Theme**: Modern black background with neon turquoise accents
+- **Custom Waveform Icon**: New purple/pink gradient waveform icon
 
-## Preview
+## Installation
 
+Download the latest release from the [Releases](https://github.com/Kokulawarman/kobo/releases) page.
 
-https://github.com/user-attachments/assets/2344a817-f36c-42b0-9ebc-cdd6e926b7a0
+## Building from Source
 
-
-## Features
-
-- Hold `Ctrl` key to record your voice, release to transcribe it.
-- Automatically insert the transcript into the application you are using.
-- Works with any application that supports text input.
-- Data is stored locally on your machine.
-- Transcrbing with OpenAI Whisper (provided by OpenAI or Groq).
-- Support custom API URL so you can use your own API to transcribe.
-- Supports post-processing your transcript with LLMs (e.g. OpenAI, Groq and Gemini).
+```bash
+npm install
+npm run build:win  # For Windows
+```
 
 ## License
 
-[AGPL-3.0](./LICENSE)
+This project is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)** - see the [LICENSE](LICENSE) file for details.
+
+### Original Project
+
+Based on [Whispo](https://github.com/egoist/whispo) by [egoist](https://github.com/egoist).
+
+## Credits
+
+- Original Whispo by [egoist](https://github.com/egoist)
+- Kobo modifications and enhancements by [Kokulawarman](https://github.com/Kokulawarman)
