@@ -34,6 +34,8 @@ import {
   useSaveConfigMutation,
 } from "@renderer/lib/query-client"
 import { Config } from "@shared/types"
+import { Slider } from "@renderer/components/ui/slider"
+import { AUDIO_PRESETS, AudioPresetId } from "@shared/audio-presets"
 
 export function Component() {
   const configQuery = useConfigQuery()
@@ -54,6 +56,26 @@ export function Component() {
   const shortcut = configQuery.data?.shortcut || "hold-ctrl"
   const transcriptPostProcessingProviderId: CHAT_PROVIDER_ID =
     configQuery.data?.transcriptPostProcessingProviderId || "openai"
+
+  // Audio processing settings
+  const audioPreset = configQuery.data?.audioPreset || "background-music"
+  const audioHighPassHz = configQuery.data?.audioHighPassHz ?? 200
+  const audioLowPassHz = configQuery.data?.audioLowPassHz ?? 4000
+  const audioCompressorThreshold = configQuery.data?.audioCompressorThreshold ?? -45
+  const audioCompressorRatio = configQuery.data?.audioCompressorRatio ?? 10
+  const audioGain = configQuery.data?.audioGain ?? 6
+
+  const applyPreset = (presetId: AudioPresetId) => {
+    const preset = AUDIO_PRESETS[presetId]
+    saveConfig({
+      audioPreset: presetId,
+      audioHighPassHz: preset.highPassHz,
+      audioLowPassHz: preset.lowPassHz,
+      audioCompressorThreshold: preset.compressorThreshold,
+      audioCompressorRatio: preset.compressorRatio,
+      audioGain: preset.gain,
+    })
+  }
 
   if (!configQuery.data) return null
 
@@ -247,6 +269,198 @@ export function Component() {
           </>
         )}
       </ControlGroup>
+
+      <ControlGroup
+        title="Audio Processing"
+        endDescription={
+          <TooltipProvider disableHoverableContent delayDuration={0}>
+            <Tooltip>
+              <TooltipTrigger className="inline-flex items-center justify-center">
+                <span className="i-mingcute-information-fill text-base"></span>
+              </TooltipTrigger>
+              <TooltipContent collisionPadding={5} className="max-w-xs">
+                Adjust these settings to improve voice detection in noisy environments. Use presets for quick setup or adjust manually.
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        }
+      >
+        <Control label="Environment Preset" className="px-3">
+          <Select
+            value={audioPreset}
+            onValueChange={(value) => {
+              if (value === "custom") {
+                saveConfig({ audioPreset: "custom" })
+              } else {
+                applyPreset(value as AudioPresetId)
+              }
+            }}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {Object.entries(AUDIO_PRESETS).map(([key, preset]) => (
+                <SelectItem key={key} value={key}>
+                  {preset.label} - {preset.description}
+                </SelectItem>
+              ))}
+              <SelectItem value="custom">Custom</SelectItem>
+            </SelectContent>
+          </Select>
+        </Control>
+
+        <Control
+          label={
+            <div className="flex items-center gap-1">
+              <span>High-Pass Filter</span>
+              <TooltipProvider disableHoverableContent delayDuration={0}>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <span className="i-mingcute-question-line text-xs text-muted-foreground"></span>
+                  </TooltipTrigger>
+                  <TooltipContent collisionPadding={5} className="max-w-xs">
+                    Removes low frequencies (bass, rumble). Higher values remove more bass - good for filtering out music beats.
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+          }
+          className="px-3"
+        >
+          <Slider
+            value={audioHighPassHz}
+            min={50}
+            max={400}
+            step={10}
+            unit=" Hz"
+            onChange={(value) => {
+              saveConfig({ audioHighPassHz: value, audioPreset: "custom" })
+            }}
+          />
+        </Control>
+
+        <Control
+          label={
+            <div className="flex items-center gap-1">
+              <span>Low-Pass Filter</span>
+              <TooltipProvider disableHoverableContent delayDuration={0}>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <span className="i-mingcute-question-line text-xs text-muted-foreground"></span>
+                  </TooltipTrigger>
+                  <TooltipContent collisionPadding={5} className="max-w-xs">
+                    Removes high frequencies (hiss, cymbals). Lower values cut more highs - good for filtering hi-hats and cymbals.
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+          }
+          className="px-3"
+        >
+          <Slider
+            value={audioLowPassHz}
+            min={2000}
+            max={10000}
+            step={100}
+            unit=" Hz"
+            onChange={(value) => {
+              saveConfig({ audioLowPassHz: value, audioPreset: "custom" })
+            }}
+          />
+        </Control>
+
+        <Control
+          label={
+            <div className="flex items-center gap-1">
+              <span>Voice Sensitivity</span>
+              <TooltipProvider disableHoverableContent delayDuration={0}>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <span className="i-mingcute-question-line text-xs text-muted-foreground"></span>
+                  </TooltipTrigger>
+                  <TooltipContent collisionPadding={5} className="max-w-xs">
+                    How quiet of a voice to detect. Lower values (e.g., -50dB) catch softer whispers.
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+          }
+          className="px-3"
+        >
+          <Slider
+            value={audioCompressorThreshold}
+            min={-60}
+            max={-20}
+            step={1}
+            unit=" dB"
+            onChange={(value) => {
+              saveConfig({ audioCompressorThreshold: value, audioPreset: "custom" })
+            }}
+          />
+        </Control>
+
+        <Control
+          label={
+            <div className="flex items-center gap-1">
+              <span>Compression</span>
+              <TooltipProvider disableHoverableContent delayDuration={0}>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <span className="i-mingcute-question-line text-xs text-muted-foreground"></span>
+                  </TooltipTrigger>
+                  <TooltipContent collisionPadding={5} className="max-w-xs">
+                    Evens out volume differences. Higher ratios make soft and loud speech more similar in volume.
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+          }
+          className="px-3"
+        >
+          <Slider
+            value={audioCompressorRatio}
+            min={2}
+            max={20}
+            step={1}
+            unit=":1"
+            onChange={(value) => {
+              saveConfig({ audioCompressorRatio: value, audioPreset: "custom" })
+            }}
+          />
+        </Control>
+
+        <Control
+          label={
+            <div className="flex items-center gap-1">
+              <span>Amplification</span>
+              <TooltipProvider disableHoverableContent delayDuration={0}>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <span className="i-mingcute-question-line text-xs text-muted-foreground"></span>
+                  </TooltipTrigger>
+                  <TooltipContent collisionPadding={5} className="max-w-xs">
+                    Boosts your voice volume. Use higher values (6-8x) for soft speech, lower (2-3x) for normal volume.
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+          }
+          className="px-3"
+        >
+          <Slider
+            value={audioGain}
+            min={1}
+            max={15}
+            step={0.5}
+            unit="x"
+            onChange={(value) => {
+              saveConfig({ audioGain: value, audioPreset: "custom" })
+            }}
+          />
+        </Control>
+      </ControlGroup>
     </div>
   )
 }
+

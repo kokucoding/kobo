@@ -27,4 +27,13 @@ export type Config = {
   transcriptPostProcessingProviderId?: CHAT_PROVIDER_ID
   transcriptPostProcessingPrompt?: string
   chatModel?: string // Custom chat/LLM model name
+
+  // Audio Processing Settings
+  audioPreset?: "calm" | "quiet" | "restaurant" | "background-music" | "max-isolation" | "custom"
+  audioHighPassHz?: number      // 50-400, default 200
+  audioLowPassHz?: number       // 2000-10000, default 4000
+  audioCompressorThreshold?: number  // -60 to -20, default -45
+  audioCompressorRatio?: number      // 2-20, default 10
+  audioGain?: number                 // 1-15, default 6
 }
+

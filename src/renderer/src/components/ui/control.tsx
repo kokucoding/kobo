@@ -15,7 +15,7 @@ export const Control = ({
       className={cn("flex items-center justify-between gap-5 py-2", className)}
     >
       <div className="shrink-0">
-        <span className="text-sm font-medium">{label}</span>
+        <span className="text-sm font-medium text-foreground">{label}</span>
       </div>
       <div className="flex max-w-[50%] grow items-center justify-end">
         {children}
@@ -39,15 +39,16 @@ export const ControlGroup = ({
     <div className={className}>
       {title && (
         <div className="mb-3">
-          <span className="text-sm font-semibold">{title}</span>
+          <span className="text-sm font-semibold text-primary">{title}</span>
         </div>
       )}
-      <div className="divide-y rounded-lg border">{children}</div>
+      <div className="divide-y divide-border rounded-lg border border-border">{children}</div>
       {endDescription && (
-        <div className="mt-2 flex justify-end text-right text-xs text-neutral-500">
+        <div className="mt-2 flex justify-end text-right text-xs text-muted-foreground">
           <div className="max-w-[70%]">{endDescription}</div>
         </div>
       )}
     </div>
   )
 }
+

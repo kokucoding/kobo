@@ -1,7 +1,9 @@
 import EventEmitter from "./event-emitter"
-import { playSound } from "./sound"
+import { tipcClient } from "./tipc-client"
+import { DEFAULT_AUDIO_SETTINGS } from "@shared/audio-presets"
 
 const MIN_DECIBELS = -45
+const MAX_RECORDING_TIME = 30 * 60 * 1000 // 30 minutes max
 
 const logTime = (label: string) => {
   let time = performance.now()
@@ -40,6 +42,7 @@ export class Recorder extends EventEmitter<{
 }> {
   stream: MediaStream | null = null
   mediaRecorder: MediaRecorder | null = null
+  recordingTimeout: number | null = null
 
   constructor() {
     super()
@@ -108,32 +111,81 @@ export class Recorder extends EventEmitter<{
 
     log("getUserMedia")
 
-    // Create audio processing chain for amplification
-    const audioContext = new AudioContext()
-    const source = audioContext.createMediaStreamSource(stream)
+    // Get audio processing settings from config
+    let highPassHz: number = DEFAULT_AUDIO_SETTINGS.highPassHz
+    let lowPassHz: number = DEFAULT_AUDIO_SETTINGS.lowPassHz
+    let compressorThreshold: number = DEFAULT_AUDIO_SETTINGS.compressorThreshold
+    let compressorRatio: number = DEFAULT_AUDIO_SETTINGS.compressorRatio
+    let gain: number = DEFAULT_AUDIO_SETTINGS.gain
 
-    // Compressor for normalizing volume (softer sounds get louder)
-    const compressor = audioContext.createDynamicsCompressor()
-    compressor.threshold.setValueAtTime(-40, audioContext.currentTime)
-    compressor.knee.setValueAtTime(30, audioContext.currentTime)
-    compressor.ratio.setValueAtTime(8, audioContext.currentTime)
-    compressor.attack.setValueAtTime(0.003, audioContext.currentTime)
-    compressor.release.setValueAtTime(0.25, audioContext.currentTime)
+    try {
+      const config = await tipcClient.getConfig()
+      highPassHz = config.audioHighPassHz ?? highPassHz
+      lowPassHz = config.audioLowPassHz ?? lowPassHz
+      compressorThreshold = config.audioCompressorThreshold ?? compressorThreshold
+      compressorRatio = config.audioCompressorRatio ?? compressorRatio
+      gain = config.audioGain ?? gain
+    } catch (error) {
+      console.warn("Failed to load audio config, using defaults:", error)
+    }
 
-    // Gain node for additional amplification
-    const gainNode = audioContext.createGain()
-    gainNode.gain.setValueAtTime(3.0, audioContext.currentTime) // Boost by 3x for soft speech
+    // Create audio processing chain with error handling
+    let processedStream: MediaStream
 
-    // Connect the audio processing chain
-    source.connect(compressor)
-    compressor.connect(gainNode)
+    try {
+      const audioContext = new AudioContext()
+      const source = audioContext.createMediaStreamSource(stream)
 
-    // Create a destination to capture the processed audio
-    const destination = audioContext.createMediaStreamDestination()
-    gainNode.connect(destination)
+      // HIGH-PASS FILTER: Remove bass/beats below cutoff
+      const highPassFilter = audioContext.createBiquadFilter()
+      highPassFilter.type = "highpass"
+      highPassFilter.frequency.setValueAtTime(highPassHz, audioContext.currentTime)
+      highPassFilter.Q.setValueAtTime(0.7, audioContext.currentTime)
 
-    // Use the processed stream for recording
-    const processedStream = destination.stream
+      // LOW-PASS FILTER: Remove high frequencies above cutoff
+      const lowPassFilter = audioContext.createBiquadFilter()
+      lowPassFilter.type = "lowpass"
+      lowPassFilter.frequency.setValueAtTime(lowPassHz, audioContext.currentTime)
+      lowPassFilter.Q.setValueAtTime(0.7, audioContext.currentTime)
+
+      // COMPRESSOR for normalizing volume (catches soft speech)
+      const compressor = audioContext.createDynamicsCompressor()
+      compressor.threshold.setValueAtTime(compressorThreshold, audioContext.currentTime)
+      compressor.knee.setValueAtTime(10, audioContext.currentTime)
+      compressor.ratio.setValueAtTime(compressorRatio, audioContext.currentTime)
+      compressor.attack.setValueAtTime(0, audioContext.currentTime)
+      compressor.release.setValueAtTime(0.1, audioContext.currentTime)
+
+      // GAIN node for amplification
+      const gainNode = audioContext.createGain()
+      gainNode.gain.setValueAtTime(gain, audioContext.currentTime)
+
+      // LIMITER to prevent clipping
+      const limiter = audioContext.createDynamicsCompressor()
+      limiter.threshold.setValueAtTime(-3, audioContext.currentTime)
+      limiter.knee.setValueAtTime(0, audioContext.currentTime)
+      limiter.ratio.setValueAtTime(20, audioContext.currentTime)
+      limiter.attack.setValueAtTime(0, audioContext.currentTime)
+      limiter.release.setValueAtTime(0.1, audioContext.currentTime)
+
+      // Connect the audio processing chain
+      source.connect(highPassFilter)
+      highPassFilter.connect(lowPassFilter)
+      lowPassFilter.connect(compressor)
+      compressor.connect(gainNode)
+      gainNode.connect(limiter)
+
+      // Create a destination to capture the processed audio
+      const destination = audioContext.createMediaStreamDestination()
+      limiter.connect(destination)
+
+      processedStream = destination.stream
+      log("audio processing chain created")
+    } catch (error) {
+      // Fallback: use original stream without processing
+      console.error("Audio processing failed, using raw stream:", error)
+      processedStream = stream
+    }
 
     const mediaRecorder = (this.mediaRecorder = new MediaRecorder(processedStream, {
       audioBitsPerSecond: 128e3,
@@ -142,6 +194,12 @@ export class Recorder extends EventEmitter<{
 
     let audioChunks: Blob[] = []
     let startTime = Date.now()
+
+    // Set max recording time protection
+    this.recordingTimeout = window.setTimeout(() => {
+      console.warn("Max recording time reached, auto-stopping")
+      this.stopRecording()
+    }, MAX_RECORDING_TIME)
 
     // Start timing for mediaRecorder.onstart
     mediaRecorder.onstart = () => {
@@ -156,12 +214,37 @@ export class Recorder extends EventEmitter<{
     mediaRecorder.ondataavailable = (event) => {
       audioChunks.push(event.data)
     }
+
+    mediaRecorder.onerror = (event) => {
+      console.error("MediaRecorder error:", event)
+      // Attempt to salvage what we have
+      if (audioChunks.length > 0) {
+        const blob = new Blob(audioChunks, { type: "audio/webm" })
+        if (blob.size > 0) {
+          this.emit("record-end", blob, Date.now() - startTime)
+        }
+      }
+      audioChunks = []
+    }
+
     mediaRecorder.onstop = async () => {
+      // Clear timeout
+      if (this.recordingTimeout) {
+        clearTimeout(this.recordingTimeout)
+        this.recordingTimeout = null
+      }
+
       const duration = Date.now() - startTime
       const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType })
 
-      this.emit("record-end", blob, duration)
+      // Validate blob before emitting
+      if (blob.size === 0) {
+        console.error("Empty recording, discarding")
+        audioChunks = []
+        return
+      }
 
+      this.emit("record-end", blob, duration)
       audioChunks = []
     }
 
@@ -169,8 +252,18 @@ export class Recorder extends EventEmitter<{
   }
 
   stopRecording() {
+    // Clear timeout if exists
+    if (this.recordingTimeout) {
+      clearTimeout(this.recordingTimeout)
+      this.recordingTimeout = null
+    }
+
     if (this.mediaRecorder) {
-      this.mediaRecorder.stop()
+      try {
+        this.mediaRecorder.stop()
+      } catch (error) {
+        console.error("Error stopping MediaRecorder:", error)
+      }
       this.mediaRecorder = null
     }
 
@@ -179,8 +272,6 @@ export class Recorder extends EventEmitter<{
       this.stream = null
     }
 
-
     this.emit("destroy")
-
   }
 }

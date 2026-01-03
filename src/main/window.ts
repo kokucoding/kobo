@@ -195,6 +195,8 @@ export function showPanelWindow() {
     const position = getPanelWindowPosition()
     win.setPosition(position.x, position.y)
     win.showInactive()
+    // Re-apply alwaysOnTop every time to fix Windows z-order bug
+    win.setAlwaysOnTop(true, "screen-saver")
     makeKeyWindow(win)
   }
 }
